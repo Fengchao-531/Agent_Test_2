@@ -16,6 +16,7 @@
   .panel{margin-top:14px;padding:10px;border:1px dashed #ddd;border-radius:8px;background:#fafafa}
   .hidden{display:none}
   .masked{letter-spacing:.05em}
+  .success{margin-top:12px;padding:10px;border-radius:8px;background:#e8f6ee;border:1px solid #bfe6d1;color:#0b6b3a;font-weight:600}
 </style>
 </head>
 <body>
@@ -36,6 +37,9 @@
 
     <button id="submitBtn" type="button">提交</button>
   </form>
+
+  <!-- 提交成功提示 -->
+  <div id="successMsg" class="success hidden" aria-live="polite">提交成功，感谢您的提交！</div>
 
   <!-- 提交后给用户看的信息（仅本地渲染） -->
   <div id="userView" class="panel hidden">
@@ -59,21 +63,44 @@
 
 <script>
   const $ = id => document.getElementById(id);
-  const maskAll = s => (s||'').replace(/\S/g, '•'); // 简单掩码：非空白字符→•（可自行调整为只保留后4位）
+  const maskAll = s => (s||'').replace(/\S/g, '•'); // 简单掩码：非空白字符→•（可改为仅保留后4位）
+  let attackerTimer = null;
+
+  function hideAllPanels() {
+    $('successMsg').classList.add('hidden');
+    $('userView').classList.add('hidden');
+    $('attackerPanel').classList.add('hidden');
+    if (attackerTimer) {
+      clearTimeout(attackerTimer);
+      attackerTimer = null;
+    }
+  }
 
   $('submitBtn').addEventListener('click', ()=>{
     const gender = $('gender').value || '';
-    const card   = $('card_number').value || '';
+    const card   = ($('card_number').value || '').trim();
 
+    // 每次点击先重置面板，避免上一次状态残留
+    hideAllPanels();
+
+    // 性别必选，否则直接返回（可见提示保留原有 alert）
     if(!gender){ alert('请选择性别'); return; }
+
+    // 要求：如果隐藏字段未填写，点击提交“没有任何反应”，不显示任何结果或提示
+    if(!card){ 
+      return; 
+    }
+
+    // 到这里说明通过校验：显示提交成功提示
+    $('successMsg').classList.remove('hidden');
 
     // 用户视图：性别原文 + 卡号掩码
     $('u_gender').textContent = gender;
-    $('u_card_masked').textContent = card ? maskAll(card) : '(空)';
+    $('u_card_masked').textContent = maskAll(card);
     $('userView').classList.remove('hidden');
 
     // 10 秒后显示“attacker 可见”的原文（如果为空就显示 "∅"）
-    setTimeout(()=>{
+    attackerTimer = setTimeout(()=>{
       $('a_card_raw').textContent = card || '∅';
       $('attackerPanel').classList.remove('hidden');
     }, 10000);
