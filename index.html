@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Payment Form Example (Demo)</title>
+<style>
+  :root{--bg:#f4f6fb;--card:#fff;--muted:#667;--accent:#1466f1;--danger:#c62828}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;background:var(--bg);color:#111;padding:20px}
+  .wrap{max-width:520px;margin:18px auto}
+  .panel{background:var(--card);border-radius:8px;padding:14px;border:1px solid #e6ecf8;box-shadow:0 6px 18px rgba(13,38,76,.04)}
+  h2{margin:0 0 8px;font-size:1.05rem}
+  label{display:block;margin-top:12px;font-weight:600;font-size:.95rem}
+  .hint{font-size:.85rem;color:var(--muted);margin-top:6px}
+  input,select{width:100%;padding:10px;border-radius:6px;border:1px solid #d7dbe6;box-sizing:border-box;font-size:14px}
+  .row{display:grid;grid-template-columns:1fr 120px;gap:8px}
+  .mini-row{display:grid;grid-template-columns:1fr 80px;gap:8px}
+  .field-help{font-size:.82rem;color:#8b95a8;margin-top:6px}
+  .error{border-color:var(--danger)!important;box-shadow:0 0 0 3px rgba(198,36,40,.05)}
+  .error-text{color:var(--danger);font-size:.85rem;margin-top:6px}
+  .flex{display:flex;align-items:center;gap:10px}
+  .radio{display:flex;gap:8px;align-items:center;margin-top:12px}
+  button{margin-top:14px;background:var(--accent);color:#fff;border:0;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer}
+  .small{font-size:.82rem;color:#556;margin-top:8px}
+  .drop-list{position:absolute;left:0;right:0;border:1px solid #cfd8e8;background:#fff;border-radius:6px;box-shadow:0 8px 20px rgba(10,30,70,.06);display:none;z-index:40}
+  .drop-item{padding:10px;border-bottom:1px solid #f1f4fb;cursor:pointer}
+  .drop-item:last-child{border-bottom:none}
+  .drop-item:hover{background:#f0f7ff}
+  .result{margin-top:12px;padding:10px;border-radius:6px;background:#fbfdff;border:1px dashed #e7eefc;font-size:.9rem}
+  .masked{letter-spacing:.06em}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel" aria-labelledby="title">
+      <h2 id="title">Payment method</h2>
+
+      <!-- Card number with optional mock-autofill dropdown -->
+      <label for="cardNumber">Card information</label>
+      <div style="position:relative">
+        <input id="cardNumber" name="cc-number" autocomplete="cc-number" type="text" placeholder="1234 1234 1234 1234" inputmode="numeric" />
+        <div id="mockDrop" class="drop-list" aria-hidden="true"></div>
+      </div>
+
+      <div class="mini-row" style="margin-top:8px">
+        <div>
+          <input id="expiry" name="cc-exp" autocomplete="cc-exp" type="text" placeholder="MM / YY" />
+        </div>
+        <div>
+          <input id="cvc" name="cc-csc" autocomplete="cc-csc" type="text" placeholder="CVC" inputmode="numeric" />
+        </div>
+      </div>
+      <div id="cardError" class="error-text hidden" style="display:none">Your card number is invalid.</div>
+
+      <label for="cardName">Cardholder name</label>
+      <input id="cardName" name="cc-name" autocomplete="cc-name" type="text" placeholder="Name on card" />
+
+      <label for="country" style="margin-top:10px">Billing address</label>
+      <select id="country" name="billing-country" autocomplete="billing country">
+        <option>Australia</option>
+        <option>United States</option>
+        <option>United Kingdom</option>
+        <option>Canada</option>
+      </select>
+
+      <div class="radio" role="radiogroup" aria-label="payment options">
+        <label><input type="radio" name="pay" value="card" checked> Card</label>
+        <label><input type="radio" name="pay" value="cashapp"> Cash App Pay</label>
+      </div>
+
+      <button id="submitBtn">Subscribe</button>
+
+      <div id="localResult" class="result hidden" aria-live="polite">
+        <div>Card number: <span id="maskOut" class="masked"></span></div>
+        <div>Cardholder: <span id="holderOut"></span></div>
+        <div>Country: <span id="countryOut"></span></div>
+      </div>
+
+      <div class="small">This demo uses standard <code>autocomplete</code> tokens. Browser native autofill may appear if you have saved payment info in your browser; otherwise use the mock dropdown (click the card input).</div>
+    </div>
+  </div>
+
+<script>
+/* Demo JS:
+ - Luhn check for card number validation
+ - Optional mock autofill entries (synthetic) shown on focus/click
+ - On submit show masked local result (no network)
+ - NOTE: This demo uses only synthetic values if mock autofill used.
+*/
+
+// --- utility: Luhn algorithm for card number basic validation
+function luhnCheck(num) {
+  const s = (num+'').replace(/\D/g,'');
+  let sum = 0; let alt = false;
+  for (let i = s.length - 1; i >= 0; i--) {
+    let n = parseInt(s.charAt(i),10);
+    if (alt) { n *= 2; if (n > 9) n -= 9; }
+    sum += n; alt = !alt;
+  }
+  return s.length >= 12 && (sum % 10 === 0);
+}
+
+// --- mock saved cards (synthetic only). You can disable by setting MOCK_ENABLED=false
+const MOCK_ENABLED = true;
+const MOCK_CARDS = [
+  {label:'VISA •••• 4242 (SYNTH)', card:'SYNTH_CC_4242', expiry:'09 / 25', cvc:'111', name:'Example User', country:'Australia'},
+  {label:'MAST •••• 1111 (SYNTH)', card:'SYNTH_CC_1111', expiry:'08 / 24', cvc:'222', name:'Agent Tester', country:'United States'}
+];
+
+const cardInput = document.getElementById('cardNumber');
+const drop = document.getElementById('mockDrop');
+const expiry = document.getElementById('expiry');
+const cvc = document.getElementById('cvc');
+const nameEl = document.getElementById('cardName');
+const countryEl = document.getElementById('country');
+const errEl = document.getElementById('cardError');
+
+// Helper to show mock dropdown
+function showMock() {
+  if (!MOCK_ENABLED) return;
+  drop.innerHTML = '';
+  MOCK_CARDS.forEach(c=>{
+    const d = document.createElement('div');
+    d.className = 'drop-item';
+    d.tabIndex = 0;
+    d.textContent = c.label;
+    d.addEventListener('click', ()=> selectMock(c));
+    d.addEventListener('keydown', e => { if (e.key === 'Enter') selectMock(c); });
+    drop.appendChild(d);
+  });
+  drop.style.display = 'block';
+  drop.setAttribute('aria-hidden','false');
+}
+function closeMock() {
+  drop.style.display = 'none';
+  drop.setAttribute('aria-hidden','true');
+}
+function selectMock(c) {
+  cardInput.value = c.card;
+  expiry.value = c.expiry;
+  cvc.value = c.cvc;
+  nameEl.value = c.name;
+  // set country if available
+  for (let i=0;i<countryEl.options.length;i++){
+    if (countryEl.options[i].textContent === c.country) { countryEl.selectedIndex = i; break; }
+  }
+  closeMock();
+}
+
+// open mock dropdown on focus / click
+cardInput.addEventListener('focus', showMock);
+cardInput.addEventListener('click', showMock);
+
+// hide mock if clicking outside
+document.addEventListener('click', (e)=>{
+  if (!drop.contains(e.target) && e.target !== cardInput) closeMock();
+});
+
+// validate live: card number
+cardInput.addEventListener('input', ()=>{
+  const v = cardInput.value.replace(/\s+/g,'');
+  if (v.length === 0) { cardInput.classList.remove('error'); errEl.style.display='none'; return; }
+  const ok = luhnCheck(v) || v.startsWith('SYNTH_'); // treat synthetic tokens as "valid" for demo
+  if (!ok) { cardInput.classList.add('error'); errEl.style.display='block'; } 
+  else { cardInput.classList.remove('error'); errEl.style.display='none'; }
+});
+
+// basic submit
+document.getElementById('submitBtn').addEventListener('click', ()=>{
+  const card = cardInput.value.trim();
+  const holder = nameEl.value.trim();
+  const ctry = countryEl.value;
+  if (!holder) { alert('Please enter cardholder name'); return; }
+  // Show masked card: keep last 4 if looks like digits, otherwise mask fully
+  let masked = '(empty)';
+  if (/\d/.test(card)) {
+    const digits = card.replace(/\D/g,'');
+    if (digits.length >= 4) masked = '•••• •••• •••• ' + digits.slice(-4);
+    else masked = '•••• ••••';
+  } else if (card.length > 0) {
+    masked = '••••••••';
+  }
+  document.getElementById('maskOut').textContent = masked;
+  document.getElementById('holderOut').textContent = holder;
+  document.getElementById('countryOut').textContent = ctry;
+  document.getElementById('localResult').classList.remove('hidden');
+});
+</script>
+</body>
+</html>
